@@ -37,6 +37,7 @@ class TestBenchmarkSuite:
     reference_implementation : Optional[type[TensorProductBase]] = None
     correctness_threshold : float = 5e-7
     torch_op : bool = True
+    test_name: str = None
 
     @staticmethod
     def validate_inputs(test_list : list[TestDefinition]) -> None:
@@ -99,12 +100,13 @@ class TestBenchmarkSuite:
             else:
                 raise ValueError("output folder must be specified for non-editable installs.")
         else:
-            output_folder = pathlib.Path(output_folder) / f"{millis_since_epoch}"        
+            output_folder = pathlib.Path(output_folder)
 
         TestBenchmarkSuite.validate_inputs(test_list)
         output_folder.mkdir(parents=True)
 
         metadata = TestBenchmarkSuite.generate_metadata(test_list)
+        metadata["test_name"] = self.test_name 
 
         with open(os.path.join(output_folder,'metadata.json'), 'w') as f:
             json.dump(metadata, f, indent=2) 

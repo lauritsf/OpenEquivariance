@@ -179,6 +179,35 @@ We conducted our benchmarks on an NVIDIA A100-SXM-80GB GPU at
 Lawrence Berkeley National Laboratory. Your results may differ 
 a different GPU.
 
+The file `test/benchmark.py` can reproduce the figures in 
+our paper an A100-SXM4-80GB GPU. 
+Run it with the following invocations: 
+```bash
+python benchmark.py -o outputs/uvu uvu --plot
+python benchmark.py -o outputs/uvu uvw --plot
+python benchmark.py -o outputs/roofline roofline --plot
+python benchmark.py -o outputs/conv conv --plot --data data/molecular_structures
+```
+
+If your GPU has limited memory, you might want to try
+the `--limited-memory` flag to disable some expensive
+tests and / or reduce the batch size with `-b`. Run
+`python benchmark.py --help` for a full list of flags.
+
+Here's a set
+of invocations for an A5000 GPU:
+
+```bash
+python benchmark.py -o outputs/uvu uvu --limited-memory --plot
+python benchmark.py -o outputs/uvw uvw -b 25000 --plot
+python benchmark.py -o outputs/roofline roofline --plot
+python benchmark.py -o outputs/conv conv --data data/molecular_structures --limited-memory
+```
+Note that for GPUs besides the one we used in our 
+testing, the roofline slope / peak will be incorrect, and your results
+may differ from the ones we've reported. The plots for the convolution fusion
+experiments also require a GPU with a minimum of 40GB of memory. 
+
 ## Tensor products we accelerate 
 e3nn supports a variety of connection modes for CG tensor products. We support 
 two that are commonly used in equivariant graph neural networks:

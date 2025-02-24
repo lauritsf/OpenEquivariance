@@ -9,7 +9,8 @@ from openequivariance.implementations.convolution.ConvolutionBase import *
 logger = getLogger()
 
 def load_graph(filename):
-    coords, rows, cols, name = [None] * 4 
+    coords, rows, cols = [None] * 3
+    name = pathlib.Path(filename).stem
     with open(filename, 'rb') as f:
         logger.info(f"Loading {name} from pickle...")
         result = pickle.load(f)
@@ -20,12 +21,12 @@ def load_graph(filename):
 
 class ConvBenchmarkSuite:
     def __init__(self, configs, 
-        num_warmup = 10,
-        num_iter = 30,
-        reference_impl=None,
-        torch_op=True,
-        prng_seed = 12345
-    ):
+            num_warmup = 10,
+            num_iter = 30,
+            reference_impl=None,
+            torch_op=True,
+            test_name=None,
+            prng_seed = 12345):
         self.configs = configs
         self.num_warmup = num_warmup
         self.num_iter = num_iter
@@ -34,20 +35,22 @@ class ConvBenchmarkSuite:
         self.correctness_threshold = 1e-5
         self.torch_op = torch_op
         self.exp_count = 0
+        self.test_name = test_name 
+
+        self.millis_since_epoch = round(time.time() * 1000)
 
     def run(self, graph, implementations, direction, output_folder=None, correctness=True, double_backward_correctness=False, benchmark=True):
-        millis_since_epoch = round(time.time() * 1000)
         if output_folder is None:
             if oeq._check_package_editable():
-                output_folder = oeq._editable_install_output_path / f"{millis_since_epoch}"
+                output_folder = oeq._editable_install_output_path / f"{self.millis_since_epoch}"
             else:
                 raise ValueError("output folder must be specified for non-editable installs.")
         else:
-            output_folder = pathlib.Path(output_folder) / f"{millis_since_epoch}"
-        output_folder.mkdir(parents=True)
+            output_folder = pathlib.Path(output_folder) 
+        output_folder.mkdir(parents=True, exist_ok=True)
 
         metadata = {
-            "test_name": "Convolution",
+            "test_name": self.test_name, 
             "configs": [str(config) for config in self.configs], 
             "implementations": [impl.name() for impl in implementations],
             "graph": graph.name
@@ -112,3 +115,5 @@ class ConvBenchmarkSuite:
                 self.exp_count += 1
 
                 logger.info(f'Finished {tc_name}, graph {graph.name}')
+        
+        return output_folder

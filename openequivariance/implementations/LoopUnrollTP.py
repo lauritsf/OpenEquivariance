@@ -29,23 +29,39 @@ class LoopUnrollTP(TensorProductBase):
         assert(config.irrep_dtype == config.weight_dtype)
         self.is_uvw = (config.instructions[0].connection_mode == "uvw")
 
-        self.forward_schedule = ComputationSchedule(self.config, 
-                smem_limit=dp.maxSharedMemPerBlock, warps_per_block=8,
-                block_count=dp.multiprocessorCount * 4,
-                direction = "forward",
-                irrep_dtype = config.irrep_dtype,
-                weight_dtype = config.weight_dtype,
-                include_scratch=self.is_uvw,
-                stream_weights=self.is_uvw)
+        def generate_forward_schedule(warps_per_block):
+            self.forward_schedule = ComputationSchedule(self.config, 
+                    smem_limit=dp.maxSharedMemPerBlock, warps_per_block=warps_per_block,
+                    block_count=dp.multiprocessorCount * 4,
+                    direction = "forward",
+                    irrep_dtype = config.irrep_dtype,
+                    weight_dtype = config.weight_dtype,
+                    include_scratch=self.is_uvw,
+                    stream_weights=self.is_uvw)
 
-        self.backward_schedule = ComputationSchedule(self.config, 
-                smem_limit=dp.maxSharedMemPerBlock, warps_per_block=8,
-                block_count=dp.multiprocessorCount * 3,
-                direction = "backward",
-                irrep_dtype = config.irrep_dtype,
-                weight_dtype = config.weight_dtype,
-                include_scratch=self.is_uvw,
-                stream_weights=self.is_uvw)
+        def generate_backward_schedule(warps_per_block):
+            self.backward_schedule = ComputationSchedule(self.config, 
+                    smem_limit=dp.maxSharedMemPerBlock, warps_per_block=warps_per_block,
+                    block_count=dp.multiprocessorCount * 3,
+                    direction = "backward",
+                    irrep_dtype = config.irrep_dtype,
+                    weight_dtype = config.weight_dtype,
+                    include_scratch=self.is_uvw,
+                    stream_weights=self.is_uvw)
+
+        # Latent error: warps per block must be a multiple of 4 or we run into
+        # problems for uvw, float64 backward pass. Need to eventually fix.
+
+        try:
+            generate_forward_schedule(8)
+        except Exception as e:
+            generate_forward_schedule(4)
+
+        try:
+            generate_backward_schedule(8)
+        except Exception as e:
+            generate_backward_schedule(4)
+
 
         self.jit_kernel = template.render(
             forward_schedule=self.forward_schedule,

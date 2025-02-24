@@ -41,11 +41,16 @@ def run_paper_uvw_benchmark(params) -> pathlib.Path:
             num_iter=100,
             bench_batch_size=params.batch_size,
             prng_seed=11111,
-            torch_op=True
+            torch_op=True,
+            test_name="uvw"
         )
     
     logger.setLevel(logging.INFO)
-    return bench_suite.run(tests, output_folder=params.output_folder)
+    data_folder = bench_suite.run(tests, output_folder=params.output_folder)
+
+    if params.plot:
+        import openequivariance.benchmark.plotting as plotting
+        plotting.plot_uvw(data_folder) 
 
 if __name__ == '__main__':
     run_paper_uvw_benchmark()
