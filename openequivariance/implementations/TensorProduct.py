@@ -10,4 +10,4 @@ class TensorProduct(LoopUnrollTP):
 
     @staticmethod
     def name():
-        return super().name() 
+        return LoopUnrollTP.name() 
