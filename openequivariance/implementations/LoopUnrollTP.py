@@ -62,9 +62,10 @@ class LoopUnrollTP(TensorProductBase):
         except Exception as e:
             generate_backward_schedule(4)
 
-        self.jit_kernel = template.render(
+
+        self.jit_kernel = postprocess_kernel(template.render(
             forward_schedule=self.forward_schedule,
-            backward_schedule=self.backward_schedule)
+            backward_schedule=self.backward_schedule))
 
         logger.info("Starting NVRTC")
         self.internal = JITTPImpl(self.jit_kernel,
