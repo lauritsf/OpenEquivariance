@@ -87,8 +87,10 @@ class CUETensorProduct(TensorProductBase):
             torch._dynamo.config.cache_size_limit = 64
 
             self.cue_tp.to('cuda')
-            self.cue_tp = torch.compile(self.cue_tp, fullgraph=True, mode="default")
+            # self.cue_tp = torch.compile(self.cue_tp, fullgraph=True, mode="default")
+            self.tp_correctness = self.cue_tp
             self.forward = self.cue_tp.__call__
+            self.forward_correctness = lambda x, y, W: self.tp_correctness(x, y, W)
         
         if isinstance(config, FullyConnectedTPProblem):
             e = cue.descriptors.fully_connected_tensor_product(
