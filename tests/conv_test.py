@@ -17,7 +17,7 @@ class ConvCorrectness:
     def dtype(self, request):
         return request.param
 
-    @pytest.fixture(params=["1drf_radius6.0.pickle"], ids=['1drf'], scope='class')
+    @pytest.fixture(params=["1drf_radius3.5.pickle"], ids=['1drf'], scope='class')
     def graph(self, request):
         download_prefix = "https://portal.nersc.gov/project/m1982/equivariant_nn_graphs/"
         filename = request.param
@@ -66,10 +66,37 @@ class ConvCorrectness:
         self.check_result(result, "weights_grad")
 
 class TestProductionModels(ConvCorrectness):
-    from openequivariance.benchmark.benchmark_configs import mace_problems 
-    production_model_tpps = mace_problems # Due to e3nn memory constraints, check only MACE for now
+    from openequivariance.benchmark.benchmark_configs import mace_problems, diffdock_configs 
+    production_model_tpps = list(chain(
+        mace_problems, 
+        diffdock_configs
+        ))
 
     @pytest.fixture(params=production_model_tpps, ids = lambda x : x.label, scope="class")
     def problem(self, request, dtype):
         request.param.irrep_dtype, request.param.weight_dtype = dtype, dtype
         return request.param
+
+ 
+class TestUVWSingleIrrep(ConvCorrectness):
+    muls = [
+        (1, 1, 1), (4, 1, 4), (8, 1, 8), (16, 1, 16), 
+        (32, 1, 32), (5, 1, 5), (13, 1, 13), (33, 1, 33), (49, 1, 49), (64, 1, 64), 
+        (1, 2, 1), (1, 4, 1), (1, 16, 1), (1, 32, 1), (16, 3, 16) 
+    ]
+    
+    irs = [ (0, 0, 0), (1, 1, 1), (1, 0, 1), (1, 2, 1), (5, 3, 5), (7, 2, 5) ]
+
+    def id_func(m, i): 
+        return f"{m[0]}x{i[0]}e__x__{m[1]}x{i[1]}e---{m[2]}x{i[2]}e"
+
+    @pytest.fixture(params=product(muls, irs), 
+                    ids = lambda x: TestUVWSingleIrrep.id_func(x[0], x[1]),
+                    scope="class") 
+    def problem(self, request, dtype):
+        m, i = request.param[0], request.param[1]
+        instructions=[(0, 0, 0, "uvw", True)]
+        return oeq.TPProblem(f"{m[0]}x{i[0]}e", f"{m[1]}x{i[1]}e", f"{m[2]}x{i[2]}e",
+                             instructions, shared_weights=False, 
+                             internal_weights=False,
+                             irrep_dtype=dtype, weight_dtype=dtype)
