@@ -27,6 +27,7 @@ class ConvCorrectness:
             urllib.request.urlretrieve(download_prefix + filename, temp_file.name)
             graph = load_graph(temp_file.name)
 
+        #graph = load_graph("data/1drf_radius3.5.pickle")
         return graph
 
     @pytest.fixture(params=['atomic', 'deterministic'], scope='class')

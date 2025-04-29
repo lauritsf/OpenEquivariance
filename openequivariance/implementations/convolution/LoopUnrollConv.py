@@ -115,7 +115,8 @@ class LoopUnrollConv(ConvolutionBase):
         self.internal = internal_cls(self.jit_kernel,
                 vars(self.forward_schedule.launch_config), 
                 vars(self.backward_schedule.launch_config),
-                {"L3_dim": self.L3.dim})
+                {"L3_dim": self.L3.dim,
+                 "is_uvw": int(self.is_uvw)})
         logger.info("Kernel compiled!")
 
         self.reorder_weights_e3nn_to_oeq = lambda input, output, has_batch_dim: \
