@@ -4,23 +4,25 @@
 [[Supported Tensor Products]](#tensor-products-we-accelerate)
 [[Citation and Acknowledgements]](#citation-and-acknowledgements)
 
-OpenEquivariance is a kernel generator for the Clebsch-Gordon tensor product, 
+OpenEquivariance is a CUDA and HIP kernel generator for the Clebsch-Gordon tensor product, 
 a key kernel in rotation-equivariant deep neural networks. 
 It implements some of the tensor products 
-that [e3nn](https://e3nn.org/) supports that are
+that [e3nn](https://e3nn.org/) supports 
 commonly found in graph neural networks 
 (e.g. [Nequip](https://github.com/mir-group/nequip) or
-[MACE](https://github.com/ACEsuit/mace)). To get started, install our package via
+[MACE](https://github.com/ACEsuit/mace)). To get 
+started, ensure that you have GCC 9+ on your system 
+and install our package via
 
 ```bash
 pip install git+https://github.com/PASSIONLab/OpenEquivariance
 ```
 
-We provide up to an order of magnitude acceleration over e3nn
-and up to ~2x speedup over 
-[NVIDIA cuEquivariance](https://github.com/NVIDIA/cuEquivariance),
-which has a closed-source kernel package. We also offer fused
-equivariant graph convolutions that can reduce 
+We provide up to an order of magnitude acceleration over e3nn perform on par with the latest
+version of [NVIDIA cuEquivariance](https://github.com/NVIDIA/cuEquivariance),
+which has a closed-source kernel package. 
+We also offer fused equivariant graph 
+convolutions that can reduce 
 computation and memory consumption significantly. 
 
 We currently support NVIDIA GPUs and just added beta support on AMD GPUs for
@@ -124,21 +126,23 @@ print(torch.norm(Z))
 arbitrary order. 
 
 ## Installation 
-We currently support Linux systems only. We recommend that you use
-`conda` or `mamba` to set up a Python environment for installation.
+We currently support Linux systems only. 
+Before installation and the first library import, 
+ensure that the command 
+`c++ --version` returns GCC 9+; if not, set the
+`CC` and `CXX` environment variables to point to
+valid compilers. On NERSC Perlmutter,
+`module load gcc` will set up your environment
+correctly. 
 
-After activating an environment of your choice, run
+To install, run
 ```bash
 pip install git+https://github.com/PASSIONLab/OpenEquivariance
 ```
 After installation, the very first library
-import will trigger a build of a C++ extension we use.
+import will trigger a build of a C++ extension we use,
+which takes longer than usual.
 All subsequent imports will not retrigger compilation.
-
-If you encounter problems with installation, let us
-know by filing a bug and try a development build (see
-below). After installation, you should be able 
-to run the example above.
 
 ## Replicating our benchmarks 
 To run our benchmark suite, you'll also need the following packages: 
