@@ -63,6 +63,31 @@ __global__ void {{name}}(void* workspace, IRREP_T* dst_ptr) {
 
 {{ generate_fixup_kernel("fixup_forward", forward_schedule.launch_config.warp_size, forward_schedule.L3.dim, forward_workspace_offset) }}
 
+template<int ROW_LEN>
+__device__ __forceinline__ void kahanAdd(IRREP_T* c_arr, IRREP_T* sum_arr, int lane_id) {
+    c_arr += lane_id;
+    sum_arr += lane_id;
+    #pragma unroll 
+    for(int j = 0; j < ROW_LEN; j += THREADS_PER_WARP) {
+        if(j >= ROW_LEN - THREADS_PER_WARP) {
+            if(lane_id < ROW_LEN - j) {
+                IRREP_T y = c_arr[j];
+                IRREP_T sum = sum_arr[j];
+                IRREP_T t = sum + y;
+                c_arr[j] = y - (t - sum);
+                sum_arr[j] = t;
+            }
+        }
+        else {
+            IRREP_T y = c_arr[j];
+            IRREP_T sum = sum_arr[j];
+            IRREP_T t = sum + y;
+            c_arr[j] = y - (t - sum);
+            sum_arr[j] = t;
+        }
+    }
+}
+
 __global__ void forward(
         IRREP_T* L1_in,
         IRREP_T* L2_in,
@@ -99,6 +124,12 @@ __global__ void forward(
         bool firstSegment = true;
         ROW_OPERATION({{segment.L3.dim}}, j, L3_smem[j + lane_id] = 0.0f;)
 
+        {%- set ns = namespace(L3_accum="L3_smem") %}
+        {%- if forward_schedule.kahan %}
+            ROW_OPERATION({{segment.L3.dim}}, j, L3_kahan_smem[j + lane_id] = 0.0f;)
+            {%- set ns.L3_accum="L3_kahan_smem" %}
+        {%- endif %}
+
         for(size_t i = start; i < end; i++) {
             {{idx_type}} row = rows[i]; {{idx_type}} col = cols[i];
 
@@ -115,8 +146,12 @@ __global__ void forward(
             {%- endif %}
 
             __syncwarp();
-            forward_loop_unroll_{{i}}(L1_smem, L2_smem, w, weights_smem, L3_smem, scratch_smem, lane_id);
+            forward_loop_unroll_{{i}}(L1_smem, L2_smem, w, weights_smem, {{ns.L3_accum}}, scratch_smem, lane_id);
             __syncwarp();
+
+            {%- if forward_schedule.kahan %}
+                kahanAdd<{{segment.L3.dim}}>(L3_kahan_smem, L3_smem, lane_id);
+            {%- endif %}
 
             bool changeRow = (i < end - 1) && (row != rows[i+1]);
 
@@ -179,6 +214,12 @@ __global__ void backward(
         bool firstSegment = true;
         ROW_OPERATION({{segment.L1.dim}}, j, L1_grad_smem[j + lane_id] = 0.0f;)
 
+        {%- set ns = namespace(L1_accum="L1_grad_smem") %}
+        {%- if backward_schedule.kahan %}
+            ROW_OPERATION({{segment.L1.dim}}, j, L1_kahan_smem[j + lane_id] = 0.0f;)
+            {%- set ns.L1_accum="L1_kahan_smem" %}
+        {%- endif %}
+
         for(size_t i = start; i < end; i++) {
             {{idx_type}} row = rows[i]; {{idx_type}} col = cols[i];
             {{idx_type}} tperm_idx = tperm[i];
@@ -214,8 +255,12 @@ __global__ void backward(
 
             __syncwarp();
             backward_loop_unroll_{{i}}(L1_smem, L2_smem, w, weights_smem, L3_grad_smem,
-                    L1_grad_smem, L2_grad_smem, wgrad, weights_grad_smem, scratch_smem, lane_id);
+                    {{ns.L1_accum}}, L2_grad_smem, wgrad, weights_grad_smem, scratch_smem, lane_id);
             __syncwarp();
+
+            {%- if backward_schedule.kahan %}
+                kahanAdd<{{segment.L1.dim}}>(L1_kahan_smem, L1_grad_smem, lane_id);
+            {%- endif %}
 
             bool changeRow = (i < end - 1) && (col != cols[i+1]);
             if(changeRow || i == end - 1) {
@@ -274,6 +319,12 @@ __global__ void double_backward_A(
         bool firstSegment = true;
         ROW_OPERATION({{segment.L3.dim}}, j, L3_smem[j + lane_id] = 0.0f;)
 
+        {%- set ns = namespace(L3_accum="L3_smem") %}
+        {%- if forward_schedule.kahan %}
+            ROW_OPERATION({{segment.L3.dim}}, j, L3_kahan_smem[j + lane_id] = 0.0f;)
+            {%- set ns.L3_accum="L3_kahan_smem" %}
+        {%- endif %}
+
         for(size_t i = start; i < end; i++) {
             unsigned {{idx_type}} row = rows[i]; unsigned {{idx_type}} col = cols[i];
 
@@ -316,9 +367,13 @@ __global__ void double_backward_A(
                 }
 
                 __syncwarp();
-                forward_loop_unroll_{{i}}(L1_smem, L2_smem, w_buffer, weights_smem, L3_smem, scratch_smem, lane_id);
+                forward_loop_unroll_{{i}}(L1_smem, L2_smem, w_buffer, weights_smem, {{ns.L3_accum}}, scratch_smem, lane_id);
                 __syncwarp();
             }
+
+            {%- if forward_schedule.kahan %}
+                kahanAdd<{{segment.L3.dim}}>(L3_kahan_smem, L3_smem, lane_id);
+            {%- endif %}
 
             bool changeRow = (i < end - 1) && (row != rows[i+1]);
             if(changeRow || i == end - 1) {
@@ -379,6 +434,12 @@ __global__ void double_backward_B(
         bool firstSegment = true;
         ROW_OPERATION({{segment.L1.dim}}, j, L1_grad_smem[j + lane_id] = 0.0f;)
 
+        {%- set ns = namespace(L1_accum="L1_grad_smem") %}
+        {%- if backward_schedule.kahan %}
+            ROW_OPERATION({{segment.L1.dim}}, j, L1_kahan_smem[j + lane_id] = 0.0f;)
+            {%- set ns.L1_accum="L1_kahan_smem" %}
+        {%- endif %}
+
         for(size_t i = start; i < end; i++) {
             unsigned {{idx_type}} row = rows[i]; unsigned {{idx_type}} col = cols[i];
             {{idx_type}} tperm_idx = tperm[i];
@@ -437,9 +498,13 @@ __global__ void double_backward_B(
 
                 __syncwarp();
                 double_backward_loop_unroll_{{i}}(L1_smem, L2_buffer, w_buffer, weights_smem, L3_grad_smem,
-                        L1_grad_smem, L2_grad_smem, L2_dgrad_buffer, n, wgrad, weights_grad_smem, scratch_smem, lane_id);
+                        {{ns.L1_accum}}, L2_grad_smem, L2_dgrad_buffer, n, wgrad, weights_grad_smem, scratch_smem, lane_id);
                 __syncwarp();
             }
+
+            {%- if backward_schedule.kahan %}
+                kahanAdd<{{segment.L1.dim}}>(L1_kahan_smem, L1_grad_smem, lane_id);
+            {%- endif %}
 
             IRREP_T* l1_grad_shft = L1_grad + col * {{schedule.L1.dim}} + lane_id;
             IRREP_T* l2_grad_shft = L2_grad + tperm_idx * {{schedule.L2.dim}} + lane_id;

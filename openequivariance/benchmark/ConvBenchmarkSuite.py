@@ -24,22 +24,22 @@ class ConvBenchmarkSuite:
             num_warmup = 10,
             num_iter = 30,
             reference_impl=None,
-            torch_op=True,
             test_name=None,
-            prng_seed = 12345):
+            prng_seed = 12345,
+            correctness_threshold = 1e-5):
         self.configs = configs
         self.num_warmup = num_warmup
         self.num_iter = num_iter
         self.reference_impl = reference_impl
         self.prng_seed = 12345
-        self.correctness_threshold = 1e-5
-        self.torch_op = torch_op
+        self.correctness_threshold = correctness_threshold 
         self.exp_count = 0
         self.test_name = test_name 
 
         self.millis_since_epoch = round(time.time() * 1000)
 
-    def run(self, graph, implementations, direction, output_folder=None, correctness=True, double_backward_correctness=False, benchmark=True):
+    def run(self, graph, implementations, direction, output_folder=None, 
+            correctness=True, benchmark=True, high_precision_ref=False):
         if output_folder is None:
             if oeq._check_package_editable():
                 output_folder = oeq._editable_install_output_path / f"{self.millis_since_epoch}"
@@ -65,20 +65,15 @@ class ConvBenchmarkSuite:
             for impl in implementations:
                 tc_name = f"{config}, {impl.name()}"
                 logger.info(f'Starting {tc_name}, graph {graph.name}, {direction}')
-                conv = impl(config, torch_op=self.torch_op)
-
-                if double_backward_correctness:
-                    double_backward_correctness = conv.test_correctness_double_backward(self.graph, 
-                            thresh=self.correctness_threshold, 
-                            prng_seed=self.prng_seed, 
-                            reference_implementation=self.reference_impl)
+                conv = impl(config) 
 
                 if direction == "forward":
                     if correctness:
                         correctness = conv.test_correctness_forward(graph, 
                                 thresh=self.correctness_threshold, 
                                 prng_seed=self.prng_seed, 
-                                reference_implementation=self.reference_impl)
+                                reference_implementation=self.reference_impl,
+                                high_precision_ref=high_precision_ref)
 
                     if benchmark:
                         benchmark = conv.benchmark_forward(self.num_warmup,
@@ -90,23 +85,33 @@ class ConvBenchmarkSuite:
                         correctness = conv.test_correctness_backward(graph, 
                                 thresh=self.correctness_threshold, 
                                 prng_seed=self.prng_seed, 
-                                reference_implementation=self.reference_impl)
+                                reference_implementation=self.reference_impl,
+                                high_precision_ref=high_precision_ref)
 
                     if benchmark:
                         benchmark = conv.benchmark_backward(self.num_warmup,
                                     self.num_iter, graph, prng_seed=12345)
+                        
+                if direction == "double_backward": 
+                    if correctness:
+                        correctness = conv.test_correctness_double_backward(self.graph, 
+                                thresh=self.correctness_threshold, 
+                                prng_seed=self.prng_seed, 
+                                reference_implementation=self.reference_impl,
+                                high_precision_ref=high_precision_ref)
+                    
+                    assert not benchmark
 
                 result = {
                     "config": str(config),
                     "irrep_dtype": str(config.irrep_dtype),
                     "weight_dtype": str(config.weight_dtype),
-                    "torch_overhead_included": self.torch_op,
+                    "torch_overhead_included": conv.torch_op,
                     "direction": direction,
                     "graph": graph.name,
                     "name": impl.name(),
                     "correctness": correctness,
-                    "benchmark": benchmark,
-                    "double_backward_correctness": double_backward_correctness
+                    "benchmark": benchmark
                 }
          
                 fname = pathlib.Path(f"{output_folder}/{self.exp_count}_{impl.name()}_{graph.name}.json")

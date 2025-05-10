@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.linalg as la
 
-import itertools, logging, argparse, os, copy
+import itertools, logging, argparse, os, copy, gc
 from pathlib import Path
 import urllib.request
 
@@ -121,11 +121,7 @@ def benchmark_roofline(params):
     if params.plot:
         plot({"data_folder": data_folder})
 
-
-def benchmark_convolution(params):
-    filenames = [   "covid_spike_radius3.0.pickle", 
-                    "1drf_radius6.0.pickle", 
-                    "carbon_lattice_radius6.0.pickle"]
+def download_graphs(params, filenames):
     download_prefix = "https://portal.nersc.gov/project/m1982/equivariant_nn_graphs/"
 
     if not Path(params.data).exists():
@@ -140,9 +136,18 @@ def benchmark_convolution(params):
                 exit(1)
             else:
                 logging.info(f"Downloading {download_prefix + filename}...")
-                urllib.request.urlretrieve(download_prefix + filename, target_path)
-        
+                urllib.request.urlretrieve(download_prefix + filename, target_path) 
+
         graphs.append(load_graph(str(target_path)))
+
+    return graphs
+
+def benchmark_convolution(params):
+    filenames = [   "covid_spike_radius3.0.pickle", 
+                    "1drf_radius6.0.pickle", 
+                    "carbon_lattice_radius6.0.pickle"]
+
+    graphs = download_graphs(params, filenames)
 
     if not params.disable_bench:
         configs = [ ChannelwiseTPP("128x0e+128x1o+128x2e", 
@@ -156,7 +161,7 @@ def benchmark_convolution(params):
         configs[1].irrep_dtype = np.float64
         configs[1].weight_dtype = np.float64
 
-        bench = ConvBenchmarkSuite(configs, torch_op=True, test_name="convolution") 
+        bench = ConvBenchmarkSuite(configs, test_name="convolution") 
 
         implementations = [ TensorProductConvScatterSum, 
                             CUEConv,
@@ -177,7 +182,6 @@ def benchmark_convolution(params):
                         graph = graph,
                         direction=direction, 
                         correctness=False,
-                        double_backward_correctness=False,
                         benchmark=True,
                         output_folder=params.output_folder)
 
@@ -187,15 +191,10 @@ def benchmark_convolution(params):
         else:
             logger.critical("Cannot plot convolution speedups over cuE with --limited-memory flag enabled.")
 
-def run_paper_hderiv_benchmark(params):
+def benchmark_double_backward(params):
     from openequivariance.benchmark.benchmark_configs import mace_nequip_problems, diffdock_configs
 
-    implementations = [
-        E3NNTensorProduct,
-        CUETensorProduct,
-        TensorProduct, 
-    ]
-
+    implementations = [E3NNTensorProduct, CUETensorProduct, TensorProduct]
     problems = diffdock_configs + mace_nequip_problems
     float64_problems = copy.deepcopy(problems)
 
@@ -216,6 +215,30 @@ def run_paper_hderiv_benchmark(params):
     if params.plot:
         plot({"data_folder": data_folder})
 
+def benchmark_kahan_accuracy(params):
+    from openequivariance.benchmark.benchmark_configs import mace_problems
+
+    filenames = ["carbon_lattice_radius6.0.pickle"]
+    graphs = download_graphs(params, filenames)
+    implementations = [TensorProductConvAtomic, TensorProductConvKahan]
+    problems = [mace_problems[0]]
+
+    bench = ConvBenchmarkSuite(problems, test_name="kahan_convolution_accuracy", correctness_threshold=1e-4) 
+    directions = ['forward', 'backward']
+    if params.double_backward:
+        directions.append('double_backward')
+
+    for graph in graphs: 
+        for direction in directions: 
+            output_folder = bench.run(
+                    implementations = implementations,
+                    graph = graph,
+                    direction=direction, 
+                    correctness=True,
+                    benchmark=False,
+                    output_folder=params.output_folder,
+                    high_precision_ref=True)
+    
 
 def plot(params):
     import openequivariance.benchmark.plotting as plotting
@@ -288,9 +311,15 @@ if __name__=='__main__':
     parser_uvw.add_argument("--plot", action="store_true", help="Plot the results.")
     parser_uvw.set_defaults(func=run_paper_uvw_benchmark)
 
-    parser_higher_deriv = subparsers.add_parser('double_backward', help='Run the higher derivative kernel benchmark')
-    parser_higher_deriv.add_argument("--batch_size", "-b", type=int, default=50000, help="Batch size for benchmark")
-    parser_higher_deriv.set_defaults(func=run_paper_hderiv_benchmark)
+    parser_double_bwd = subparsers.add_parser('double_backward', help='Run the higher derivative kernel benchmark')
+    parser_double_bwd.add_argument("--batch_size", "-b", type=int, default=50000, help="Batch size for benchmark")
+    parser_double_bwd.set_defaults(func=benchmark_double_backward)
+
+    parser_kahan = subparsers.add_parser('kahan_conv', help='Run the Kahan convolution accuracy benchmark')
+    parser_kahan.add_argument("--data", type=str, help="Folder to download graph data to (or already containing graphs)", required=True)
+    parser_kahan.add_argument("--disable_download", action='store_true', help="Disable downloading data files if they do not exist")
+    parser_kahan.add_argument("--double_backward", action='store_true', help="Run double backward test (high memory usage)")
+    parser_kahan.set_defaults(func=benchmark_kahan_accuracy)
 
     parser_plot = subparsers.add_parser('plot', help="Generate a plot for a folder of benchmarks.")
     parser_plot.add_argument("data_folder", type=str)

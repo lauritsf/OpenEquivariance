@@ -1,5 +1,5 @@
 from openequivariance.implementations.convolution.ConvolutionBase import *
-from openequivariance.implementations.ComputationSchedule import ComputationSchedule
+from openequivariance.implementations.ComputationSchedule import ComputationSchedule, SMEMCapacityException
 from openequivariance.implementations.TensorProduct import *
 from openequivariance.templates.jinja_utils import *
 from openequivariance.extlib import *
@@ -8,9 +8,12 @@ from openequivariance.implementations.utils import filter_and_analyze_problem
 
 class LoopUnrollConv(ConvolutionBase):
     def __init__(self, config, idx_dtype=np.int64, 
-            torch_op=False, deterministic=False):
+            torch_op=False, deterministic=False, kahan=False):
         super().__init__(config, idx_dtype, torch_op, deterministic)
         L1, L2, L3 = self.L1, self.L2, self.L3 
+
+        if kahan:
+            assert deterministic
 
         env = get_jinja_environment()
         template = env.get_template("loop_unroll_conv_atomic.cuh")
@@ -36,7 +39,8 @@ class LoopUnrollConv(ConvolutionBase):
                     schedule_type=forward_schedule_type,
                     warp_size=dp.warpsize,
                     include_scratch=self.is_uvw,
-                    stream_weights=self.is_uvw)
+                    stream_weights=self.is_uvw,
+                    kahan=kahan)
 
         def generate_backward_schedule(warps_per_block):
             self.backward_schedule = ComputationSchedule(self.config, 
@@ -48,7 +52,8 @@ class LoopUnrollConv(ConvolutionBase):
                     schedule_type=backward_schedule_type,
                     warp_size=dp.warpsize,
                     include_scratch=self.is_uvw,
-                    stream_weights=self.is_uvw)
+                    stream_weights=self.is_uvw,
+                    kahan=kahan)
             
         def generate_double_backward_schedule(warps_per_block):
             self.double_backward_schedule = ComputationSchedule(self.config, 
@@ -61,7 +66,8 @@ class LoopUnrollConv(ConvolutionBase):
                     weight_dtype = config.weight_dtype,
                     include_scratch=self.is_uvw,
                     stream_weights=self.is_uvw,
-                    schedule_type=3)
+                    schedule_type=3,
+                    kahan=kahan)
 
         scheduler_generators = [generate_forward_schedule, generate_backward_schedule, generate_double_backward_schedule]
 
@@ -71,10 +77,10 @@ class LoopUnrollConv(ConvolutionBase):
                 try:
                     generate_schedule(warp_count)
                     break
-                except Exception as e:
+                except SMEMCapacityException as e:
                     warp_count -= 1
                     if warp_count == 0:
-                        raise RuntimeError("Tensor product schedule generation failed, shared memory inadequate!")
+                        raise SMEMCapacityException("Tensor product schedule generation failed, shared memory inadequate!")
 
         if not deterministic:
             for segment in self.forward_schedule.segments:
@@ -148,10 +154,11 @@ class LoopUnrollConv(ConvolutionBase):
         #with open("scratch.txt", "w") as f:
         #    f.write(self.jit_kernel)
 
-        self.reorder_weights_e3nn_to_oeq = lambda input, output, has_batch_dim: \
-                self.forward_schedule.reorder_weights(input, output, "forward", has_batch_dim) 
-        self.reorder_weights_oeq_to_e3nn = lambda input, output, has_batch_dim: \
-                self.forward_schedule.reorder_weights(input, output, "backward", has_batch_dim) 
+    def reorder_weights_e3nn_to_oeq(self, input, output, has_batch_dim):
+        return self.forward_schedule.reorder_weights(input, output, "forward", has_batch_dim)
+    
+    def reorder_weights_oeq_to_e3nn(self, input, output, has_batch_dim):
+        return self.forward_schedule.reorder_weights(input, output, "backward", has_batch_dim)
 
     @staticmethod
     def name():
