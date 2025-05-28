@@ -31,6 +31,8 @@ bench = [
 ]
 
 dev = [
+  "pre-commit",
+  "ruff",
   "pytest",
   "pytest-check",
   "torch_geometric"
@@ -43,3 +45,6 @@ include = ["openequivariance*"]
 addopts = [
     "--import-mode=importlib",
 ]
+
+[tool.ruff]
+lint.ignore = ["E741"]
