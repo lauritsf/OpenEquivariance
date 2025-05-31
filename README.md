@@ -229,6 +229,11 @@ build of PyTorch past 4/10/2025 due to incomplete support for
 TorchBind in earlier versions.
 
 ## Running MACE
+**NOTE**: If you're revisiting this page, the repo containing
+our up-to-date MACE integration has changed! See the instructions
+below; we use a branch off a fork of MACE to facilitate
+PRs into the main codebase.
+
 We have modified MACE to use our accelerated kernels instead
 of the standard e3nn backend. Here are the steps to replicate
 our MACE benchmark:
@@ -237,7 +242,7 @@ our MACE benchmark:
 ```bash
 pip uninstall mace-torch
 pip install git+https://github.com/PASSIONLab/OpenEquivariance
-pip install git+https://github.com/vbharadwaj-bk/mace_oeq
+pip install git+https://github.com/vbharadwaj-bk/mace_oeq_integration.git@oeq_experimental
 ```
 
 2. Download the `carbon.xyz` data file, available at <https://portal.nersc.gov/project/m1982/equivariant_nn_graphs/>. 
@@ -260,11 +265,11 @@ python tests/mace_driver.py carbon.xyz -o outputs/mace_tests -i e3nn cue oeq
 
 | Operation                | CUDA     | HIP |
 |--------------------------|----------|-----|
-| UVU Batch                | ✅        | ✅    |
-| UVW Batch                | ✅        | ✅    |
-| UVU Convolution          | ✅        | ✅    |
-| UVW Convolution          | ✅        | ✅    |
-| Symmetric Tensor Product | ✅ (beta) | 🚧🔨  |
+| UVU                      | ✅        | ✅    |
+| UVW                      | ✅        | ✅    |
+| UVU + Convolution        | ✅        | ✅    |
+| UVW + Convolution        | ✅        | ✅    |
+| Symmetric Tensor Product | ✅ (beta) | ✅ (beta)  |
 
 e3nn supports a variety of connection modes for CG tensor products. We support 
 two that are commonly used in equivariant graph neural networks:
@@ -289,6 +294,19 @@ We do not (yet) support:
 - Non-trainable instructions: all of your instructions must have weights associated. 
 
 If you have a use case for any of the unsupported features above, let us know.
+
+We have recently added beta support for symmetric
+contraction acceleration. Because this is a kernel 
+specific to MACE, we require e3nn as dependency
+to run it, and there is currently no support for
+compile / export (coming soon!), we 
+do not expose it in the package
+toplevel. You can test out our implementation by
+running 
+
+```python
+from openequivariance.implementations.symmetric_contraction import SymmetricContraction as OEQSymmetricContraction
+```
 
 ## Multidevice / Stream Support
 To use OpenEquivariance on multiple GPUs of a single
