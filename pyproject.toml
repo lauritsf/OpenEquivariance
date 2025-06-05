@@ -36,7 +36,10 @@ dev = [
   "pytest",
   "pytest-check",
   "torch_geometric",
-  "cmake"
+  "cmake",
+  "furo",
+  "sphinx",
+  "sphinx-autobuild"
 ]
 
 [tool.setuptools.packages.find]

@@ -1,4 +1,5 @@
 # ruff: noqa: F401
+import sys
 import openequivariance.extlib
 from pathlib import Path
 from importlib.metadata import version
@@ -10,7 +11,11 @@ from openequivariance.implementations.convolution.TensorProductConv import (
 )
 from openequivariance.implementations.utils import torch_to_oeq_dtype
 
-__version__ = version("openequivariance")
+__version__ = None
+try:
+    __version__ = version("openequivariance")
+except Exception as e:
+    print(f"Warning: Could not determine oeq version: {e}", file=sys.stderr)
 
 
 def _check_package_editable():
@@ -25,6 +30,10 @@ _editable_install_output_path = Path(__file__).parent.parent / "outputs"
 
 
 def torch_ext_so_path():
+    """
+    :returns: Path to a ``.so`` file that must be linked to use OpenEquivariance
+              from the PyTorch C++ Interface.
+    """
     return openequivariance.extlib.torch_module.__file__
 
 
