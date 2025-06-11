@@ -472,6 +472,13 @@ TORCH_LIBRARY_FRAGMENT(libtorch_tp_jit, m) {
             return 0;
         })
         .def("get_L3_dim", &TorchJITProduct::get_L3_dim)
+        .def("__eq__", [](const c10::intrusive_ptr<TorchJITProduct>& self, const c10::intrusive_ptr<TorchJITProduct>& other) {
+            if (!other) return false;
+            return self.get() == other.get();
+        })
+        .def("__hash__", [](const c10::intrusive_ptr<TorchJITProduct>& self) {
+            return std::hash<TorchJITProduct*>()(self.get());
+        })
         .def_pickle(
             // __getstate__
             [](const c10::intrusive_ptr<TorchJITProduct>& self)
@@ -498,6 +505,13 @@ TORCH_LIBRARY_FRAGMENT(libtorch_tp_jit, m) {
             return 0;
         })
         .def("get_L3_dim", &TorchJITConv::get_L3_dim)
+        .def("__eq__", [](const c10::intrusive_ptr<TorchJITConv>& self, const c10::intrusive_ptr<TorchJITConv>& other) {
+            if (!other) return false;
+            return self.get() == other.get();
+        })
+        .def("__hash__", [](const c10::intrusive_ptr<TorchJITConv>& self) {
+            return std::hash<TorchJITConv*>()(self.get());
+        })
         .def_pickle(
             // __getstate__
             [](const c10::intrusive_ptr<TorchJITConv>& self)
