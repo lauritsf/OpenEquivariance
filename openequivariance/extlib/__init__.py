@@ -19,6 +19,16 @@ try:
     major, minor = sys.version_info.major, sys.version_info.minor
     python_lib_name = f"python{major}.{minor}"
 
+    if not os.path.exists(os.path.join(python_lib_dir, f"libpython{major}.{minor}.so")):
+        # Try to find it relative to the python executable's real path
+        import sysconfig
+        # Follow symlinks to find the real python installation
+        python_real_path = os.path.realpath(sys.executable)
+        # The library should be in the 'lib' directory of the python installation
+        potential_lib_path = os.path.join(os.path.dirname(os.path.dirname(python_real_path)), 'lib')
+        if os.path.exists(os.path.join(potential_lib_path, f"libpython{major}.{minor}.so")):
+            python_lib_dir = potential_lib_path
+
 except Exception as e:
     print("Error while retrieving Python library information:", file=sys.stderr)
     print(e, file=sys.stderr)
