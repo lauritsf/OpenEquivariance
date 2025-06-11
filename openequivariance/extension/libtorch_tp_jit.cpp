@@ -477,7 +477,7 @@ TORCH_LIBRARY_FRAGMENT(libtorch_tp_jit, m) {
             return self.get() == other.get();
         })
         .def("__hash__", [](const c10::intrusive_ptr<TorchJITProduct>& self) {
-            return std::hash<TorchJITProduct*>()(self.get());
+            return static_cast<int64_t>(std::hash<TorchJITProduct*>()(self.get()));
         })
         .def_pickle(
             // __getstate__
@@ -510,7 +510,7 @@ TORCH_LIBRARY_FRAGMENT(libtorch_tp_jit, m) {
             return self.get() == other.get();
         })
         .def("__hash__", [](const c10::intrusive_ptr<TorchJITConv>& self) {
-            return std::hash<TorchJITConv*>()(self.get());
+            return static_cast<int64_t>(std::hash<TorchJITConv*>()(self.get()));
         })
         .def_pickle(
             // __getstate__
